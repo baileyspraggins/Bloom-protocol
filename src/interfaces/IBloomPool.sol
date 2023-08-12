@@ -33,6 +33,7 @@ interface IBloomPool {
     error InvalidOutToken(address outToken);
 
     error NotWhitelisted();
+    error OnSanctionedList();
     error NoCommitToProcess();
     error CommitTooSmall();
 
@@ -62,6 +63,12 @@ interface IBloomPool {
 
     /// @notice Initiates the post-hold swap.
     function initiatePostHoldSwap() external;
+
+    /**
+     * @notice Initializes the pool with the sanctions list.
+     * @param _sanctionsList The address of the sanctions list.
+     */
+    function initialize(address _sanctionsList) external;
 
     /**
      * @notice Deposits funds from the borrower committing them for the duration of the commit

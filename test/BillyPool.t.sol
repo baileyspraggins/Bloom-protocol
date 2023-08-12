@@ -15,9 +15,11 @@ import {Test} from "forge-std/Test.sol";
 import {BloomPool, State, AssetCommitment} from "src/BloomPool.sol";
 import {IBloomPool} from "src/interfaces/IBloomPool.sol";
 import {IWhitelist} from "src/interfaces/IWhitelist.sol";
+import {ISanctionsList} from "src/interfaces/ISanctionsList.sol";
 import {IBPSFeed} from "src/interfaces/IBPSFeed.sol";
 import {MockERC20} from "./mock/MockERC20.sol";
 import {MockWhitelist} from "./mock/MockWhitelist.sol";
+import {MockSanctionsList} from "./mock/MockSanctionsList.sol";
 import {MockSwapFacility} from "./mock/MockSwapFacility.sol";
 import {MockBPSFeed} from "./mock/MockBPSFeed.sol";
 
@@ -27,9 +29,11 @@ contract BloomPoolTest is Test {
     MockERC20 internal stableToken;
     MockERC20 internal billyToken;
     MockWhitelist internal whitelist;
+    MockSanctionsList internal sanctionslist;
     MockSwapFacility internal swap;
     address internal treasury = makeAddr("treasury");
     MockBPSFeed internal feed;
+    address internal eHandler = makeAddr("eHandler");
 
     uint256 internal commitPhaseDuration;
     uint256 internal poolPhaseDuration;
@@ -56,6 +60,7 @@ contract BloomPoolTest is Test {
         billyToken = new MockERC20(18);
         vm.label(address(billyToken), "BillyToken");
         whitelist = new MockWhitelist();
+        sanctionslist = new MockSanctionsList();
         swap = new MockSwapFacility(stableToken, billyToken);
         feed = new MockBPSFeed();
 
@@ -68,7 +73,7 @@ contract BloomPoolTest is Test {
             swapFacility: address(swap),
             treasury: treasury,
             leverageBps: 4 * BPS,
-            emergencyHandler: address(0),
+            emergencyHandler: eHandler,
             minBorrowDeposit: 100.0e18,
             commitPhaseDuration: commitPhaseDuration = 3 days,
             preHoldSwapTimeout: 7 days,
@@ -79,6 +84,13 @@ contract BloomPoolTest is Test {
             name: "Term Bound Token 6 month 2023-06-1",
             symbol: "TBT-1"
         });
+        initialize();
+    }
+
+    function initialize() public {
+        vm.startPrank(eHandler);
+        pool.initialize(address(sanctionslist));
+        vm.stopPrank();
     }
 
     function testDefaultState() public {
@@ -433,4 +445,28 @@ contract BloomPoolTest is Test {
         addr = makeAddr(string(abi.encodePacked(label, " (whitelisted)")));
         whitelist.add(addr);
     }
+
+function makeSanctionedAddr(string memory label) internal returns (address addr) {
+    vm.startPrank(eHandler);
+    addr = makeAddr(string(abi.encodePacked(label, " (sanctioned)")));
+    // Create an array of addresses to accommodate the expected function input
+    address[] memory addresses = new address[](1);
+    addresses[0] = addr;
+    sanctionslist.addToSanctionsList(addresses); // Use the array
+    vm.stopPrank();
+}
+
+function testCannontLendFromSanctionAddress(address user, uint256 amount) public {
+    address[] memory addresses = new address[](1);
+    addresses[0] = user;
+    sanctionslist.addToSanctionsList(addresses);
+    //assertTrue(sanctionslist.isSanctioned(user));
+    amount = bound(amount, 1, type(uint128).max);
+    stableToken.mint(user, amount);
+    vm.startPrank(user);
+    stableToken.approve(address(pool), amount);
+    vm.expectRevert(abi.encodeWithSelector(IBloomPool.OnSanctionedList.selector));
+    pool.depositLender(amount);
+    vm.stopPrank();
+}
 }
