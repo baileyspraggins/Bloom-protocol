@@ -60,7 +60,7 @@ contract BloomPool is IBloomPool, ISwapRecipient, ERC20 {
     uint128 internal totalBorrowerShares;
     uint128 internal lenderDistribution;
     uint128 internal totalLenderShares;
-    bool internal _initialized = false;
+    bool internal _initialized;
 
     // ================== Modifiers ==================
 
@@ -73,6 +73,11 @@ contract BloomPool is IBloomPool, ISwapRecipient, ERC20 {
     modifier onlyAfterState(State lastInvalidState) {
         State currentState = state();
         if (currentState <= lastInvalidState) revert InvalidState(currentState);
+        _;
+    }
+
+    modifier notSanctioned() {
+        if (ISanctionsList(sanctionsList).isSanctioned(msg.sender)) revert OnSanctionedList();
         _;
     }
 
@@ -116,12 +121,11 @@ contract BloomPool is IBloomPool, ISwapRecipient, ERC20 {
     /**
      * @inheritdoc IBloomPool
      */
-    function initialize(address _sanctionsList) external {
-        require(!_initialized, "Contract already initialized");
-        require(msg.sender == EMERGENCY_HANDLER, "Not authorized");
-        sanctionsList = ISanctionsList(_sanctionsList);
-        if (sanctionsList.isSanctioned(msg.sender)) revert OnSanctionedList();
+    function initialize(ISanctionsList _sanctionsList) external {
+        if (_initialized) revert AlreadyInitialized();
+        if (msg.sender != EMERGENCY_HANDLER) revert NotEmergencyHandler();
         _initialized = true;
+        sanctionsList = _sanctionsList;
     }
     // =============== Deposit Methods ===============
 
@@ -144,8 +148,7 @@ contract BloomPool is IBloomPool, ISwapRecipient, ERC20 {
     /**
      * @inheritdoc IBloomPool
      */
-    function depositLender(uint256 amount) external onlyState(State.Commit) returns (uint256 newId) {
-        if (ISanctionsList(sanctionsList).isSanctioned(msg.sender)) revert OnSanctionedList();
+    function depositLender(uint256 amount) external onlyState(State.Commit) notSanctioned returns (uint256 newId) {
         if (amount == 0) revert CommitTooSmall();
         UNDERLYING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
         uint256 cumulativeAmountEnd;
@@ -274,8 +277,7 @@ contract BloomPool is IBloomPool, ISwapRecipient, ERC20 {
     /**
      * @inheritdoc IBloomPool
      */
-    function withdrawLender(uint256 shares) external onlyState(State.FinalWithdraw) {
-        if (ISanctionsList(sanctionsList).isSanctioned(msg.sender)) revert OnSanctionedList();
+    function withdrawLender(uint256 shares) external onlyState(State.FinalWithdraw) notSanctioned {
         _burn(msg.sender, shares);
         uint256 currentLenderDist = lenderDistribution;
         uint256 sharesLeft = totalLenderShares;

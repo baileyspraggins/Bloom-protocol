@@ -89,7 +89,7 @@ contract BloomPoolTest is Test {
 
     function initialize() public {
         vm.startPrank(eHandler);
-        pool.initialize(address(sanctionslist));
+        pool.initialize(ISanctionsList(address(sanctionslist)));
         vm.stopPrank();
     }
 

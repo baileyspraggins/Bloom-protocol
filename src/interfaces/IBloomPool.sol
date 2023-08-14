@@ -12,6 +12,7 @@ pragma solidity 0.8.19;
 
 import {AssetCommitment} from "../lib/CommitmentsLib.sol";
 import {IWhitelist} from "../interfaces/IWhitelist.sol";
+import {ISanctionsList} from "../interfaces/ISanctionsList.sol";
 
 enum State {
     Other,
@@ -28,6 +29,7 @@ enum State {
 interface IBloomPool {
     // Initialization errors
     error ZeroAddress();
+    error AlreadyInitialized();
 
     error NotSwapFacility();
     error InvalidOutToken(address outToken);
@@ -68,7 +70,7 @@ interface IBloomPool {
      * @notice Initializes the pool with the sanctions list.
      * @param _sanctionsList The address of the sanctions list.
      */
-    function initialize(address _sanctionsList) external;
+    function initialize(ISanctionsList _sanctionsList) external;
 
     /**
      * @notice Deposits funds from the borrower committing them for the duration of the commit
